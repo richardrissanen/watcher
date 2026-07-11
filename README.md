@@ -1,21 +1,9 @@
 # Watcher
 
-URL
- |
- v
-render.js
- |
- v
-Chromium loads page + executes JavaScript
- |
- v
-Wait for selector
- |
- v
-Output rendered HTML
- |
- v
-monitor.exs + Floki extracts content
- |
- v
-Hash comparison
+* URL
+* render.js
+* Chromium loads page + executes JavaScript
+* Wait for selector
+* Output rendered HTML
+* monitor.exs + Floki extracts content
+* Hash comparison
