@@ -8,73 +8,58 @@ defmodule PageMonitor do
   @default_state_file "last_hash.txt"
 
   def run do
-    with {:ok, config} <- load_config(),
-         {:ok, content} <- fetch_content(config),
-         hash <- hash(content),
-         result <- compare(hash, config.state_file),
-         :ok <- persist(hash, config.state_file) do
+    with {:ok, url} <- get_env("URL"),
+         {:ok, selector} <- get_env("SELECTOR", @default_selector),
+         {:ok, state_file} <- get_env("STATE_FILE", @default_state_file),
+         {:ok, %{body: body}} <- Req.get(url),
+         {:ok, document} <- Floki.parse_document(body),
+         {:ok, content} <- fetch_content(document, selector),
+         hash = hash(content),
+         {:ok, result} <- compare(hash, state_file),
+         :ok <- persist(hash, state_file) do
       handle_result(result, content)
     else
       {:error, reason} ->
-        IO.puts("Error: #{reason}")
+        IO.inspect(reason, label: "Error")
         System.halt(1)
     end
   end
 
-  defp load_config do
-    with {:ok, url} <- env("URL") do
-      {:ok,
-       %{
-         url: url,
-         selector: System.get_env("SELECTOR", @default_selector),
-         state_file: System.get_env("STATE_FILE", @default_state_file)
-       }}
-    end
-  end
-
-  defp env(name) do
-    case System.get_env(name) do
-      nil -> {:error, "#{name} is not set"}
+  defp get_env(var, default \\ nil) do
+    case System.get_env(var, default) do
+      nil -> {:error, "#{var} is not set"}
       value -> {:ok, value}
     end
   end
 
-  defp fetch_content(%{url: url, selector: selector}) do
-    body =
-      Req.get!(url).body
-
-    body
-    |> Floki.parse_document!()
+  defp fetch_content(document, selector) do
+    document
     |> Floki.find(selector)
     |> Floki.text(separator: " ", deep: true)
-    |> normalize()
-    |> validate_content()
-  end
-
-  defp normalize(text) do
-    text
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
+    |> validate_content()
   end
 
   defp validate_content(""), do: {:error, "selector matched no text"}
   defp validate_content(text), do: {:ok, text}
 
   defp hash(content) do
-    :crypto.hash(:sha256, content)
+    content
+    |> :crypto.hash(:sha256)
     |> Base.encode16(case: :lower)
   end
 
   defp compare(hash, state_file) do
     case File.read(state_file) do
-      {:ok, ^hash} ->
-        :unchanged
-
-      {:ok, _old_hash} ->
-        :changed
+      {:ok, stored_hash} ->
+        case String.trim(stored_hash) do
+          ^hash -> {:ok, :unchanged}
+          _ -> {:ok, :changed}
+        end
 
       {:error, :enoent} ->
-        :initial
+        {:ok, :initial}
 
       {:error, reason} ->
         {:error, reason}
@@ -82,16 +67,16 @@ defmodule PageMonitor do
   end
 
   defp persist(hash, state_file) do
-    File.write(state_file, hash)
+    temp_file = "#{state_file}.tmp"
+
+    with :ok <- File.write(temp_file, hash),
+         :ok <- File.rename(temp_file, state_file) do
+      :ok
+    end
   end
 
-  defp handle_result(:initial, _) do
-    IO.puts("Initial state stored.")
-  end
-
-  defp handle_result(:unchanged, _) do
-    IO.puts("No changes detected.")
-  end
+  defp handle_result(:initial, _), do: IO.puts("Initial state stored.")
+  defp handle_result(:unchanged, _), do: IO.puts("No changes detected.")
 
   defp handle_result(:changed, content) do
     IO.puts("Content changed!\n")
