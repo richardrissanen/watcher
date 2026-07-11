@@ -53,8 +53,8 @@ defmodule MonitorPage do
   defp validate_content(text), do: {:ok, text}
 
   defp hash(content) do
-    content
-    |> :crypto.hash(:sha256)
+    :sha256
+    |> :crypto.hash(content)
     |> Base.encode16(case: :lower)
   end
 
