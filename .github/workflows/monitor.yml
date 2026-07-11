@@ -42,7 +42,7 @@ jobs:
           STATE_FILE: ".github/monitor/car-list.hash"
         run: |
           set +e
-          elixir monitor.exs
+          elixir watcher.exs
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Debug state file
