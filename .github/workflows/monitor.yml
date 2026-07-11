@@ -25,7 +25,7 @@ jobs:
       - name: Install Playwright
         run: |
           npm install playwright
-          npx playwright install chromium
+          npx playwright install --with-deps chromium
 
       - name: Setup Elixir
         uses: erlef/setup-beam@v1
@@ -41,19 +41,35 @@ jobs:
           SELECTOR: '[data-testid="car-list-results"]'
           STATE_FILE: ".github/monitor/car-list.hash"
         run: |
-          elixir watcher.exs
+          set +e
+          elixir monitor.exs
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Debug state file
+        run: |
+          echo "Repository files:"
+          ls -la
+          echo ""
+          echo ".github contents:"
+          ls -la .github || true
+          echo ""
+          echo "Monitor state:"
+          ls -la .github/monitor || true
 
       - name: Commit updated state
         if: steps.monitor.outputs.exit_code != '1'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f ".github/monitor/car-list.hash" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add .github/monitor/car-list.hash
+            git add .github/monitor/car-list.hash
 
-          git diff --cached --quiet || git commit -m "Update monitor state"
-          git push
+            git diff --cached --quiet || git commit -m "Update monitor state"
+            git push
+          else
+            echo "No state file found. Nothing to commit."
+          fi
 
       - name: Notify change detected
         if: steps.monitor.outputs.exit_code == '2'

@@ -1,5 +1,5 @@
 Mix.install([
-  {:floki, "~> 0.36"}
+  {:floki, "0.38.4"}
 ])
 
 defmodule MonitorPage do
@@ -43,7 +43,7 @@ defmodule MonitorPage do
   defp fetch_content(document, selector) do
     document
     |> Floki.find(selector)
-    |> Floki.text(separator: " ", deep: true)
+    |> Floki.text(sep: " ", deep: true)
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
     |> validate_content()
