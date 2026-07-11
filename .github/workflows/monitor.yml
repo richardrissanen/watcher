@@ -7,6 +7,11 @@ on:
 permissions:
   contents: write
 
+env:
+  SELECTOR: '[data-testid="car-list-results"]'
+  STATE_FILE: ".github/monitor/s800.hash"
+  URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
@@ -29,3 +34,4 @@ jobs:
             git commit -m "Update monitor state"
             git push
           fi
+<div class="flex flex-col gap-5" data-testid="car-list-results">
