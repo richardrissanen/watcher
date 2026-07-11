@@ -3,7 +3,7 @@ Mix.install([
   {:floki, "~> 0.36"}
 ])
 
-defmodule PageMonitor do
+defmodule MonitorPage do
   @default_selector "body"
   @default_state_file "last_hash.txt"
 
@@ -85,4 +85,4 @@ defmodule PageMonitor do
   end
 end
 
-PageMonitor.run()
+MonitorPage.run()
