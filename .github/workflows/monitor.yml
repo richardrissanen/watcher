@@ -14,10 +14,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -33,14 +34,18 @@ jobs:
           elixir-version: "1.18"
 
       - name: Run monitor
+        id: monitor
+        continue-on-error: true
         env:
           URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
           SELECTOR: '[data-testid="car-list-results"]'
           STATE_FILE: ".github/monitor/car-list.hash"
-        run: elixir monitor.exs
+        run: |
+          elixir monitor.exs
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
-      - name: Commit state
-        if: success()
+      - name: Commit updated state
+        if: steps.monitor.outputs.exit_code != '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -49,3 +54,8 @@ jobs:
 
           git diff --cached --quiet || git commit -m "Update monitor state"
           git push
+
+      - name: Notify change detected
+        if: steps.monitor.outputs.exit_code == '2'
+        run: |
+          echo "🚗 Honda S800 listings changed!"
