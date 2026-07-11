@@ -4,13 +4,10 @@ on:
   schedule:
     - cron: "*/30 * * * *"
 
+  workflow_dispatch:
+
 permissions:
   contents: write
-
-env:
-  SELECTOR: '[data-testid="car-list-results"]'
-  STATE_FILE: ".github/monitor/s800.hash"
-  URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
 
 jobs:
   monitor:
@@ -18,20 +15,37 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # ...run your monitor...
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright
+        run: |
+          npm install playwright
+          npx playwright install chromium
+
+      - name: Setup Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - name: Run monitor
+        env:
+          URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
+          SELECTOR: '[data-testid="car-list-results"]'
+          STATE_FILE: ".github/monitor/car-list.hash"
+        run: elixir monitor.exs
 
       - name: Commit state
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add last_hash.txt
+          git add .github/monitor/car-list.hash
 
-          if ! git diff --cached --quiet; then
-            git commit -m "Update monitor state"
-            git push
-          fi
-<div class="flex flex-col gap-5" data-testid="car-list-results">
+          git diff --cached --quiet || git commit -m "Update monitor state"
+          git push

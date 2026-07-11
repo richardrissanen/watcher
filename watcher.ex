@@ -1,5 +1,4 @@
 Mix.install([
-  {:req, "~> 0.5"},
   {:floki, "~> 0.36"}
 ])
 
@@ -11,8 +10,7 @@ defmodule MonitorPage do
     with {:ok, url} <- get_env("URL"),
          {:ok, selector} <- get_env("SELECTOR", @default_selector),
          {:ok, state_file} <- get_env("STATE_FILE", @default_state_file),
-         {:ok, %{body: body}} <- Req.get(url),
-         {:ok, document} <- Floki.parse_document(body),
+         {:ok, document} <- fetch_document(url),
          {:ok, content} <- fetch_content(document, selector),
          hash = hash(content),
          {:ok, result} <- compare(hash, state_file),
@@ -29,6 +27,16 @@ defmodule MonitorPage do
     case System.get_env(var, default) do
       nil -> {:error, "#{var} is not set"}
       value -> {:ok, value}
+    end
+  end
+
+  defp fetch_document(url) do
+    case System.cmd("node", ["render.js"], env: [{"URL", url}]) do
+      {html, 0} ->
+        Floki.parse_document(html)
+
+      {error, exit_code} ->
+        {:error, "renderer failed (#{exit_code}): #{error}"}
     end
   end
 
@@ -67,6 +75,10 @@ defmodule MonitorPage do
   end
 
   defp persist(hash, state_file) do
+    state_file
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
     temp_file = "#{state_file}.tmp"
 
     with :ok <- File.write(temp_file, hash),
