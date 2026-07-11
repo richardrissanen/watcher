@@ -1,0 +1,31 @@
+name: Monitor Page
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ...run your monitor...
+
+      - name: Commit state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add last_hash.txt
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update monitor state"
+            git push
+          fi
