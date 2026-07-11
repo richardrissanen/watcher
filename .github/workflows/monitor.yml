@@ -41,7 +41,7 @@ jobs:
           SELECTOR: '[data-testid="car-list-results"]'
           STATE_FILE: ".github/monitor/car-list.hash"
         run: |
-          elixir monitor.exs
+          elixir watcher.exs
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Commit updated state
