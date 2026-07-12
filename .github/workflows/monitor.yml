@@ -13,6 +13,16 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
 
+    env:
+      NAME: Honda S800 Listings
+      URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
+      SELECTOR: '[data-testid="car-list-results"]'
+      STATE_FILE: .github/monitor/car-list.hash
+
+      NODE_VERSION: "22"
+      OTP_VERSION: "27"
+      ELIXIR_VERSION: "1.18"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -20,7 +30,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Playwright
         run: |
@@ -30,16 +40,12 @@ jobs:
       - name: Setup Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "27"
-          elixir-version: "1.18"
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
 
       - name: Run monitor
         id: monitor
         continue-on-error: true
-        env:
-          URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
-          SELECTOR: '[data-testid="car-list-results"]'
-          STATE_FILE: ".github/monitor/car-list.hash"
         run: |
           set +e
           elixir watcher.exs
@@ -49,21 +55,21 @@ jobs:
         run: |
           echo "Repository files:"
           ls -la
-          echo ""
+          echo
           echo ".github contents:"
           ls -la .github || true
-          echo ""
+          echo
           echo "Monitor state:"
-          ls -la .github/monitor || true
+          ls -la "$(dirname "$STATE_FILE")" || true
 
       - name: Commit updated state
         if: steps.monitor.outputs.exit_code != '1'
         run: |
-          if [ -f ".github/monitor/car-list.hash" ]; then
+          if [ -f "$STATE_FILE" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-            git add .github/monitor/car-list.hash
+            git add "$STATE_FILE"
 
             git diff --cached --quiet || git commit -m "Update monitor state"
             git push
@@ -71,7 +77,27 @@ jobs:
             echo "No state file found. Nothing to commit."
           fi
 
-      - name: Notify change detected
+      - name: Send email notification
         if: steps.monitor.outputs.exit_code == '2'
-        run: |
-          echo "🚗 Honda S800 listings changed!"
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.mail.me.com
+          server_port: 587
+          secure: false
+
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+
+          from: ${{ secrets.MAIL_USERNAME }}
+          to: ${{ secrets.MAIL_TO }}
+
+          subject: "🚗 ${{ env.NAME }} changed"
+
+          body: |
+            The monitored page has changed.
+
+            Monitor:
+            ${{ env.NAME }}
+
+            URL:
+            ${{ env.URL }}  
