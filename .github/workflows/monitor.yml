@@ -14,21 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      MONITOR_PAGES: >-
-        [
-          {
-            "name": "Honda S800 Listings",
-            "url": "https://carfromjapan.com/cheap-used-honda-s800-for-sale",
-            "selector": "[data-testid=\"car-list-results\"]",
-            "state_file": ".github/monitor/s800-list.hash"
-          },
-          {
-            "name": "Lane Motor Museum",
-            "url": "https://www.lanemotormuseum.org/collection/car-for-sale-other/",
-            "selector": "body",
-            "state_file": ".github/monitor/lane-motor.hash"
-          }
-        ]
+      NAME: Honda S800 Listings
+      URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
+      SELECTOR: '[data-testid="car-list-results"]'
+      STATE_FILE: .github/monitor/car-list.hash
 
       NODE_VERSION: "22"
       OTP_VERSION: "27"
@@ -59,82 +48,34 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          elixir watcher.exs > monitor.output 2>&1
+          elixir watcher.exs
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
-
-      - name: Parse changed pages
-        if: steps.monitor.outputs.exit_code == '2'
-        id: changed_pages
-        shell: bash
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          changed = []
-          output_path = Path("monitor.output")
-
-          if output_path.exists():
-              for line in output_path.read_text(encoding="utf-8").splitlines():
-                  try:
-                      record = json.loads(line)
-                  except json.JSONDecodeError:
-                      continue
-
-                  if record.get("status") == "changed":
-                      changed.append(f"Monitor:\n{record['name']}\nURL:\n{record['url']}")
-
-          if not changed:
-              changed = ["Monitor:\nUnknown\nURL:\nunknown"]
-
-          summary = "\n\n".join(changed)
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write("summary<<EOF\n")
-              fh.write(summary)
-              fh.write("\nEOF\n")
-          PY
 
       - name: Debug state file
         run: |
-          python - <<'PY'
-          import json, os
-          pages = json.loads(os.environ["MONITOR_PAGES"])
-          state_files = [page.get("state_file") for page in pages if page.get("state_file")]
-          print("Repository files:")
-          os.system("ls -la")
-          print("")
-          print(".github contents:")
-          os.system("ls -la .github || true")
-          print("")
-          print("Monitor state:")
-          for path in state_files:
-              os.system(f'ls -la "$(dirname "{path}")" || true')
-          PY
+          echo "Repository files:"
+          ls -la
+          echo
+          echo ".github contents:"
+          ls -la .github || true
+          echo
+          echo "Monitor state:"
+          ls -la "$(dirname "$STATE_FILE")" || true
 
       - name: Commit updated state
         if: steps.monitor.outputs.exit_code != '1'
         run: |
-          python - <<'PY'
-          import json, os, subprocess
-          pages = json.loads(os.environ["MONITOR_PAGES"])
-          state_files = [page.get("state_file") for page in pages if page.get("state_file")]
-          if not state_files:
-              print("No state files found. Nothing to commit.")
-              raise SystemExit(0)
+          if [ -f "$STATE_FILE" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          for path in state_files:
-              if os.path.exists(path):
-                  subprocess.run(["git", "add", path], check=True)
+            git add "$STATE_FILE"
 
-          if subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True).returncode != 0:
-              subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
-              subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
-              subprocess.run(["git", "commit", "-m", "Update monitor state"], check=True)
-              subprocess.run(["git", "push"], check=True)
-          else:
-              print("No state changes to commit.")
-          PY
+            git diff --cached --quiet || git commit -m "Update monitor state"
+            git push
+          else
+            echo "No state file found. Nothing to commit."
+          fi
 
       - name: Send email notification
         if: steps.monitor.outputs.exit_code == '2'
@@ -150,9 +91,13 @@ jobs:
           from: ${{ secrets.MAIL_USERNAME }}
           to: ${{ secrets.MAIL_TO }}
 
-          subject: "🚗 Monitored pages changed"
+          subject: "🚗 ${{ env.NAME }} changed"
 
           body: |
-            The following monitored pages changed:
+            The monitored page has changed.
 
-            ${{ steps.changed_pages.outputs.summary }}
+            Monitor:
+            ${{ env.NAME }}
+
+            URL:
+            ${{ env.URL }}  

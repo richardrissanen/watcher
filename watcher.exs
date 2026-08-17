@@ -1,6 +1,5 @@
 Mix.install([
-  {:floki, "0.38.4"},
-  {:jason, "~> 1.5"}
+  {:floki, "0.38.4"}
 ])
 
 defmodule MonitorPage do
@@ -8,81 +7,26 @@ defmodule MonitorPage do
   @default_state_file "last_hash.txt"
 
   def run do
-    case load_pages() do
-      {:ok, pages} ->
-        results =
-          Enum.reduce_while(pages, [], fn page, acc ->
-            case monitor_page(page) do
-              {:ok, result} -> {:cont, [{page, result} | acc]}
-              {:error, reason} -> {:halt, {:error, reason}}
-            end
-          end)
-
-        case results do
-          {:error, reason} ->
-            IO.inspect(reason, label: "Error")
-            System.halt(1)
-
-          page_results ->
-            Enum.each(page_results, fn {page, result} -> handle_result(page, result) end)
-
-            if Enum.any?(page_results, fn {_page, result} -> result == :changed end) do
-              System.halt(2)
-            else
-              System.halt(0)
-            end
-        end
-
+    with {:ok, url} <- get_env("URL"),
+         {:ok, selector} <- get_env("SELECTOR", @default_selector),
+         {:ok, state_file} <- get_env("STATE_FILE", @default_state_file),
+         {:ok, document} <- fetch_document(url),
+         {:ok, content} <- fetch_content(document, selector),
+         hash = hash(content),
+         {:ok, result} <- compare(hash, state_file),
+         :ok <- persist(hash, state_file) do
+      handle_result(result, content)
+    else
       {:error, reason} ->
         IO.inspect(reason, label: "Error")
         System.halt(1)
     end
   end
 
-  defp load_pages do
-    case System.get_env("MONITOR_PAGES") do
-      nil -> {:error, "MONITOR_PAGES is not set"}
-      json_pages ->
-        with {:ok, parsed_pages} <- Jason.decode(json_pages),
-             true <- is_list(parsed_pages),
-             true <- Enum.all?(parsed_pages, &is_map/1) do
-          {:ok,
-           Enum.map(parsed_pages, fn page ->
-             %{
-               name: Map.get(page, "name") || Map.get(page, :name) || Map.get(page, "url") || Map.get(page, :url),
-               url: Map.get(page, "url") || Map.get(page, :url),
-               selector: Map.get(page, "selector") || Map.get(page, :selector) || @default_selector,
-               state_file:
-                 Map.get(page, "state_file") ||
-                   Map.get(page, :state_file) ||
-                   default_state_file_for_url(Map.get(page, "url") || Map.get(page, :url))
-             }
-           end)}
-        else
-          _ -> {:error, "MONITOR_PAGES is not a JSON array of page objects"}
-        end
-    end
-  end
-
-  defp default_state_file_for_url(url) do
-    url
-    |> String.replace(~r/[^a-zA-Z0-9]+/, "-")
-    |> String.trim("-")
-    |> case do
-      "" -> @default_state_file
-      slug -> ".github/monitor/#{slug}.hash"
-    end
-  end
-
-  defp monitor_page(%{url: url, selector: selector, state_file: state_file}) do
-    with {:ok, document} <- fetch_document(url),
-         {:ok, content} <- fetch_content(document, selector),
-         hash = hash(content),
-         {:ok, result} <- compare(hash, state_file),
-         :ok <- persist(hash, state_file) do
-      {:ok, result}
-    else
-      {:error, reason} -> {:error, reason}
+  defp get_env(var, default \\ nil) do
+    case System.get_env(var, default) do
+      nil -> {:error, "#{var} is not set"}
+      value -> {:ok, value}
     end
   end
 
@@ -143,20 +87,13 @@ defmodule MonitorPage do
     end
   end
 
-  defp handle_result(page, result) do
-    payload = %{
-      name: page.name,
-      url: page.url,
-      status: Atom.to_string(result)
-    }
+  defp handle_result(:initial, _), do: IO.puts("Initial state stored.")
+  defp handle_result(:unchanged, _), do: IO.puts("No changes detected.")
 
-    case result do
-      :initial -> IO.puts(:stderr, "Initial state stored for #{page.name} (#{page.url}).")
-      :unchanged -> IO.puts(:stderr, "No changes detected for #{page.name}.")
-      :changed -> IO.puts(:stderr, "Content changed for #{page.name} (#{page.url}).")
-    end
-
-    IO.puts(Jason.encode!(payload))
+  defp handle_result(:changed, content) do
+    IO.puts("Content changed!\n")
+    IO.puts(content)
+    System.halt(2)
   end
 end
 
