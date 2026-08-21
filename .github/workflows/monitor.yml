@@ -14,9 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      NAME: Honda S800 Listings
-      URL: https://carfromjapan.com/cheap-used-honda-s800-for-sale
-      SELECTOR: '[data-testid="car-list-results"]'
+      NAME: Lane Motor Museum Listings
+      URL: https://www.lanemotormuseum.org/collection/car-for-sale-other/
+      SELECTOR: '[data-id="278329a3"]'
       STATE_FILE: .github/monitor/car-list.hash
 
       NODE_VERSION: "22"
